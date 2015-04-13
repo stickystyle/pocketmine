@@ -5,6 +5,7 @@ import json
 import sys
 import tarfile
 import os
+import os.path
 try:
     from cStringIO import StringIO
 except:
@@ -12,14 +13,11 @@ except:
 
 import yaml
 
-CHANNEL = 'beta'
 PORTS = (19132, 19133, 19134, 19135)
-SERVER = 'test'
-port = 19132
 
 
 def get_tarfile(channel):
-    r = urllib2.Request(url='http://www.pocketmine.net/api/?channel={}'.format(CHANNEL))
+    r = urllib2.Request(url='http://www.pocketmine.net/api/?channel={}'.format(channel)) # noqa
     response = urllib2.urlopen(r)
     if response.getcode() != 200:
         sys.exit()
@@ -27,7 +25,7 @@ def get_tarfile(channel):
     tag = json_body['details_url'].split('/')[-1]
     print tag
 
-    r = urllib2.Request(url='https://api.github.com/repos/PocketMine/PocketMine-MP/releases/tags/{}'.format(tag))
+    r = urllib2.Request(url='https://api.github.com/repos/PocketMine/PocketMine-MP/releases/tags/{}'.format(tag)) # noqa
     response = urllib2.urlopen(r)
     if response.getcode() != 200:
         sys.exit()
@@ -42,6 +40,7 @@ def get_tarfile(channel):
     pm_tar = tarfile.open(fileobj=StringIO(response.read()))
     return pm_tar
 
+
 def get_pocketmineyaml(pm_tar, channel):
     for tar_member in pm_tar.getnames():
         if tar_member.split('/')[-1] == "pocketmine.yml":
@@ -53,31 +52,54 @@ def get_pocketmineyaml(pm_tar, channel):
     pocketmine_yml['auto-updater']['enabled'] = False
     return pocketmine_yml
 
+
 def get_container(server, channel, port):
     cwd = os.getcwd()
-    container = {server:{'image':'stickystyle/pocketmine:{}'.format(channel),
-                     'volumes':['{}/pm-{}/worlds:/pocketmine/worlds'.format(cwd, server),
-                                '{}/pm-{}/plugins:/pocketmine/plugins'.format(cwd, server),
-                                '{}/pm-{}/configs:/pocketmine/configs'.format(cwd, server),
-                                '{}/pm-{}/players:/pocketmine/players'.format(cwd, server)
-                               ],
-                     'ports':['{}:19132/udp'.format(port)],
+    container = {'image': 'stickystyle/pocketmine:{}'.format(channel),
+                     'volumes': ['{}/pm-{}/worlds:/pocketmine/worlds'.format(cwd, server), # noqa
+                                '{}/pm-{}/plugins:/pocketmine/plugins'.format(cwd, server), # noqa
+                                '{}/pm-{}/configs:/pocketmine/configs'.format(cwd, server), # noqa
+                                '{}/pm-{}/players:/pocketmine/players'.format(cwd, server) # noqa
+                                ],
+                     'ports': ['{}:19132/udp'.format(port)],
                      'restart': 'always'
-                     }
-            }
+                 }
     return container
 
-pm_tar = get_tarfile(CHANNEL)
-pocketmine_yml = get_pocketmineyaml(pm_tar, CHANNEL)
-container = get_container(SERVER, CHANNEL, port)
 
-with open('docker-compose.yml', 'w') as fh:
-    fh.write(yaml.dump(container))
+def main(server_name, channel):
+    pm_tar = get_tarfile(channel)
+    pocketmine_yml = get_pocketmineyaml(pm_tar, channel)
 
-cwd = os.getcwd()
-os.mkdir('{}/pm-{}'.format(cwd, SERVER))
-for pm_dir in container[SERVER]['volumes']:
-    os.mkdir(pm_dir.split(':')[0])
+    try:
+        with open('docker-compose.yml', 'r') as fh:
+            docker_yml = yaml.load(fh.read())
+    except IOError:
+            docker_yml = {}
 
-with open('{}/pm-{}/configs/pocketmine.yml'.format(cwd, SERVER), 'w') as fh:
-    fh.write(yaml.dump(pocketmine_yml))
+    avail_ports = list(PORTS)
+    for container_key in docker_yml:
+        container_port = int(docker_yml[container_key]['ports'][0].split(':')[0]) # noqa
+        if container_port in avail_ports:
+            avail_ports.remove(container_port)
+    if len(avail_ports) == 0:
+        print 'no more ports!'
+        sys.exit()
+    port = avail_ports.pop()
+    container = get_container(server_name, channel, port)
+
+    docker_yml[server_name] = container
+    with open('docker-compose.yml', 'w') as fh:
+        fh.write(yaml.dump(docker_yml))
+
+    os.mkdir('{}/pm-{}'.format(os.getcwd(), server_name))
+    for pm_dir in container['volumes']:
+        os.mkdir(pm_dir.split(':')[0])
+
+    with open('{}/pm-{}/configs/pocketmine.yml'.format(os.getcwd(), server_name), 'w') as fh: # noqa
+        fh.write(yaml.dump(pocketmine_yml))
+
+if __name__ == '__main__':
+    channel = 'beta'
+    server_name = sys.argv[1]
+    main(server_name, channel)

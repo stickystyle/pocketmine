@@ -1,3 +1,4 @@
 pm-*
 docker-compose.yml
 *.bak
+.ropeproject
