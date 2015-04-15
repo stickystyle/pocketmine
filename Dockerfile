@@ -8,6 +8,7 @@ RUN apt-get update -y && \
     apt-get install -y --no-install-recommends wget
 
 RUN adduser --gecos 'PocketMine-MP' --disabled-password --home /pocketmine pocketmine
+
 USER pocketmine
 WORKDIR /pocketmine
 RUN mkdir configs && \
@@ -24,7 +25,8 @@ RUN ln -s configs/pocketmine.yml && \
     ln -s configs/server.properties && \
     ln -s configs/banned-ips.txt && \
     ln -s configs/banned-players.txt && \
-    ln -s configs/white-list.txt
+    ln -s configs/white-list.txt && \
+    ln -s configs/ops.txt
 
 VOLUME ["/pocketmine/worlds", "/pocketmine/plugins", "/pocketmine/configs", "/pocketmine/players"]
-CMD ["./start.sh", "--no-wizard"]
+CMD ["./start.sh", "--no-wizard", "--disable-ansi"]
