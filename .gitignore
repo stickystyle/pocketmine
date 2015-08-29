@@ -2,3 +2,6 @@ pm-*
 docker-compose.yml
 *.bak
 .ropeproject
+__pycache__/
+*.py[cod]
+*$py.class
